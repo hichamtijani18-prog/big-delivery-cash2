@@ -25,23 +25,26 @@ jobs:
         run: |
           set -e
 
-          if [ -f "BIG_Delivery_Cash_Android_Project_Fixed.zip" ]; then
+          if [ -f "BIG_Cash_Fixed.zip" ]; then
+            ZIP_FILE="BIG_Cash_Fixed.zip"
+          elif [ -f "BIG_Delivery_Cash_Android_Project_Fixed.zip" ]; then
             ZIP_FILE="BIG_Delivery_Cash_Android_Project_Fixed.zip"
           elif [ -f "BIG_Delivery_Cash_Android_Project.zip" ]; then
             ZIP_FILE="BIG_Delivery_Cash_Android_Project.zip"
           else
-            echo "ERROR: No Android project ZIP found."
-            echo "Files in repository:"
+            echo "ERROR: Android project ZIP not found."
+            echo "Files available in repository:"
             ls -la
             exit 1
           fi
 
-          echo "Using ZIP: $ZIP_FILE"
+          echo "Using project: $ZIP_FILE"
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "Extracted project files:"
-          find extracted -maxdepth 4 -type f | head -100
+          echo "Checking Android project files..."
+          find extracted -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \)
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -54,29 +57,42 @@ jobs:
           set -e
 
           PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" \
-            -type f \( \
-              -name settings.gradle \
-              -o -name settings.gradle.kts \
-            \) -printf '%h\n' | head -n 1)
+            -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -printf '%h\n' | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
             echo "ERROR: settings.gradle not found."
+            echo "The ZIP may not contain the complete Android project."
+            find extracted -maxdepth 5 -type f | head -100
             exit 1
           fi
 
           cd "$PROJECT_DIR"
           echo "Project directory: $PWD"
 
-          if [ -f gradlew ]; then
+          if [ ! -f "app/build.gradle" ] && \
+             [ ! -f "app/build.gradle.kts" ]; then
+            echo "ERROR: App Gradle file not found."
+            exit 1
+          fi
+
+          if [ -f "gradlew" ]; then
             chmod +x gradlew
             ./gradlew assembleDebug
           else
-            echo "Using installed Gradle 8.9"
+            echo "Gradle wrapper missing; using Gradle 8.9."
             gradle assembleDebug
           fi
 
-          echo "APK files generated:"
+          echo "Checking generated APK..."
           find . -type f -name '*.apk' -print
+
+          if ! find . -type f -path '*/build/outputs/apk/*' \
+            -name '*.apk' | grep -q .; then
+            echo "ERROR: No APK was generated."
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
