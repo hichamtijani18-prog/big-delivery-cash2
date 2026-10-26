@@ -25,18 +25,22 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="BIG_Delivery_Cash_Android_Project.zip"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP file not found: $ZIP_FILE"
+          if [ -f "BIG_Delivery_Cash_Android_Project_Fixed.zip" ]; then
+            ZIP_FILE="BIG_Delivery_Cash_Android_Project_Fixed.zip"
+          elif [ -f "BIG_Delivery_Cash_Android_Project.zip" ]; then
+            ZIP_FILE="BIG_Delivery_Cash_Android_Project.zip"
+          else
+            echo "ERROR: No Android project ZIP found."
+            echo "Files in repository:"
             ls -la
             exit 1
           fi
 
+          echo "Using ZIP: $ZIP_FILE"
           mkdir -p extracted
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "Project files extracted."
+          echo "Extracted project files:"
           find extracted -maxdepth 4 -type f | head -100
 
       - name: Set up Gradle
@@ -56,23 +60,22 @@ jobs:
             \) -printf '%h\n' | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project root not found."
+            echo "ERROR: settings.gradle not found."
             exit 1
           fi
 
           cd "$PROJECT_DIR"
-
           echo "Project directory: $PWD"
 
           if [ -f gradlew ]; then
             chmod +x gradlew
             ./gradlew assembleDebug
           else
-            echo "Gradle wrapper missing; using installed Gradle 8.9."
+            echo "Using installed Gradle 8.9"
             gradle assembleDebug
           fi
 
-          echo "Searching for generated APK..."
+          echo "APK files generated:"
           find . -type f -name '*.apk' -print
 
       - name: Upload APK
