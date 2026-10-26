@@ -1,8 +1,10 @@
-
 name: Build BIG Delivery Cash APK
 
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -19,18 +21,28 @@ jobs:
           java-version: '17'
 
       - name: Extract project ZIP
+        shell: bash
         run: |
-          unzip -o BIG_Delivery_Cash_Android_Project.zip -d extracted
-          echo "Searching for Android project..."
-          find extracted -type f \( \
-            -name settings.gradle \
-            -o -name settings.gradle.kts \
-          \)
+          set -e
+
+          ZIP_FILE="BIG_Delivery_Cash_Android_Project.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Project ZIP file not found: $ZIP_FILE"
+            ls -la
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -o "$ZIP_FILE" -d extracted
+
+          echo "Project files extracted."
+          find extracted -maxdepth 4 -type f | head -100
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.9'
 
       - name: Build APK
         shell: bash
@@ -44,20 +56,24 @@ jobs:
             \) -printf '%h\n' | head -n 1)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project root not found"
+            echo "ERROR: Android project root not found."
             exit 1
           fi
 
           cd "$PROJECT_DIR"
+
           echo "Project directory: $PWD"
 
           if [ -f gradlew ]; then
             chmod +x gradlew
             ./gradlew assembleDebug
           else
-            echo "Gradle wrapper missing; using installed Gradle"
+            echo "Gradle wrapper missing; using installed Gradle 8.9."
             gradle assembleDebug
           fi
+
+          echo "Searching for generated APK..."
+          find . -type f -name '*.apk' -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -65,3 +81,4 @@ jobs:
           name: BIG-Delivery-Cash-APK
           path: extracted/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
+          retention-days: 7
